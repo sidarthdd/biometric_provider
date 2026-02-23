@@ -3,20 +3,53 @@ import models
 from log.logger import setup_logger
 import cv2
 import sys
+import threading
+from contextlib import asynccontextmanager
 
 logger = setup_logger()
-app = FastAPI()
-cap = cv2.VideoCapture(0)
-if sys.platform.startswith('win'):
-    cap.set(cv2.CAP_PROP_BACKEND, cv2.CAP_DSHOW)
 
+camera = None
+lock = threading.Lock()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global camera
+    try:
+        if sys.platform.startswith('win'):
+            camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        else:
+            camera = cv2.VideoCapture(0)
+        
+        if not camera.isOpened():
+            logger.error("Failed to initialize camera")
+            raise RuntimeError("Camera initialization failed")
+        
+        logger.info("Camera initialized successfully")
+        yield
+    finally:
+        if camera is not None:
+            camera.release()
+            logger.info("Camera released")
+        cv2.destroyAllWindows()
+
+
+app = FastAPI(lifespan=lifespan)
+
+def get_frame():
+    global camera
+    if camera is None or not camera.isOpened():
+        logger.error("Camera is not available")
+        return None, False
+    with lock:
+        ret, frame = camera.read()
+    return frame, ret
 
 @app.get("/api/status")
 async def get_status():
-    if not cap.isOpened():
-        logger.error("Unable to access the webcam.")
-        return {"OverallStatus": "KO", "Message": "Unable to access the camera."}
-    ret, frame = cap.read()
+    frame, ret = get_frame()
+    if frame is None:
+        return {"OverallStatus": "KO", "Message": "Camera is not available."}
     if not ret:
         logger.error("Unable to read from the webcam.")
         return {"OverallStatus": "KO", "Message": "Unable to read from the camera."}
@@ -24,7 +57,10 @@ async def get_status():
 
 @app.get("/")
 async def stream():
-    ret, frame = cap.read()
+    frame, ret = get_frame()
+    if not ret or frame is None:
+        logger.error("Failed to capture frame from camera.")
+        return Response(content=b'', media_type="image/jpeg")
     ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     return Response(content=jpeg.tobytes(), media_type="image/jpeg")
 
@@ -42,8 +78,16 @@ async def initialize(InitializeRequest: models.InitialiseRequest, request: Reque
     return InitialiseResponse
 
 @app.post("/api/startBoarding")
-async def start_boarding(boardingRequest: models.BoardingRequest):
-    logger.info(f"Starting boarding process for flight {boardingRequest.FlightNumber} on {boardingRequest.TravelDate}")
+async def start_boarding(request: Request):
+    # logger.info(f"Starting boarding process for flight {boardingRequest.FlightNumber} on {boardingRequest.TravelDate}")
+    body = await request.body()
+    logger.info(f"Received start boarding request with body: {body.decode()}")
+    return {}
+
+@app.post("/api/display")
+async def display(request: Request):
+    body = await request.body()
+    logger.info(f"Received display request with body: {body.decode()}")
     return {}
 
 @app.post("/api/stopBoarding")
