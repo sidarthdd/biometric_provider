@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+import time
 import models
 from log.logger import setup_logger
 import cv2
@@ -63,7 +64,7 @@ async def get_status():
         return {"OverallStatus": "KO", "Message": "Unable to read from the camera."}
     return {"OverallStatus": "OK", "Message": ""}
 
-@app.get("/")
+@app.get("/api/liveImage")
 async def stream():
     frame, ret = get_frame()
     if not ret or frame is None:
@@ -79,7 +80,7 @@ async def initialize(InitializeRequest: models.InitialiseRequest, request: Reque
     InitialiseResponse = {
         "LiveImageSupport": "JPEGPULL",
         "VideoStreamUrl": video_stream_url,
-        "LiveImageMaxPullRate": 1,
+        "LiveImageMaxPullRate": 10,
         "RequestDisplayFeedback": 0,
         "PaxDetectionAutoReset": False
     }
@@ -105,6 +106,7 @@ async def stop_boarding():
 
 @app.post("/api/identify")
 async def identify(identifyRequest: models.IdentifyRequest) -> models.IdentifyResponse:
+    time.sleep(3)
     return models.IdentifyResponse(
         Result=2,
         SpoofingDetected=False,
@@ -113,4 +115,14 @@ async def identify(identifyRequest: models.IdentifyRequest) -> models.IdentifyRe
         CaptureImage="ABCD…",
         ReferenceData="M1MUELLER/MAX MR      EABCDEF MUCTXLLH 412  42 C12A 1234513B>50B0          2A             0                           0"
     )
-    
+
+@app.post("/api/completed")
+async def complete(request: Request):
+    body = await request.body()
+    logger.info(f"Received completed request with body: {body.decode()}")
+    return {}
+
+@app.post("/api/cancel")
+async def cancel(request: Request):
+    body = await request.body()
+    logger.info(f"Received cancel request with body: {body.decode()}")
