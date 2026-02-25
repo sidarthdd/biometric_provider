@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import time
 import models
@@ -53,6 +54,30 @@ def get_frame():
     with lock:
         ret, frame = camera.read()
     return frame, ret
+
+@app.get("/")
+async def mjpeg_stream():
+    def generate_frames():
+        while True:
+            frame, ret = get_frame()
+            if not ret or frame is None:
+                logger.error("Failed to capture frame for MJPEG stream")
+                time.sleep(0.1)
+                continue
+                
+            ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if ret:
+                frame_bytes = jpeg.tobytes()
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
+                )
+            time.sleep(0.03)
+    
+    return StreamingResponse(
+        generate_frames(),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
 
 @app.get("/api/status")
 async def get_status():
