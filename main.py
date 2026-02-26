@@ -8,6 +8,7 @@ import cv2
 import sys
 import threading
 from contextlib import asynccontextmanager
+import base64
 
 logger = setup_logger()
 
@@ -132,12 +133,29 @@ async def stop_boarding():
 @app.post("/api/identify")
 async def identify(identifyRequest: models.IdentifyRequest) -> models.IdentifyResponse:
     time.sleep(3)
+    frame, ret = get_frame()
+    if not ret or frame is None:
+        logger.error("Failed to capture frame for identification")
+        return models.IdentifyResponse(
+            Result=0,
+            SpoofingDetected=False,
+            Score=0.0,
+            CaptureDuration=0,
+            CaptureImage="",
+            ReferenceData=""
+        )
+    ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if ret:
+        capture_image_b64 = base64.b64encode(jpeg.tobytes()).decode('utf-8')
+    else:
+        logger.error("Failed to encode frame for identification")
+        capture_image_b64 = ""
     return models.IdentifyResponse(
         Result=2,
         SpoofingDetected=False,
         Score=0.996,
         CaptureDuration=2200,
-        CaptureImage="ABCD…",
+        CaptureImage=capture_image_b64,
         ReferenceData="M1MUELLER/MAX MR      EABCDEF MUCTXLLH 412  42 C12A 1234513B>50B0          2A             0                           0"
     )
 
