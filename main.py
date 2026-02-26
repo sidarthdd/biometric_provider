@@ -104,7 +104,7 @@ async def initialize(InitializeRequest: models.InitialiseRequest, request: Reque
     logger.info(f"Initializing biometric provider for client {InitializeRequest.ClientId}")
     video_stream_url = str(request.base_url)
     InitialiseResponse = {
-        "LiveImageSupport": "JPEGPULL",
+        "LiveImageSupport": "MJPEGSTREAM",
         "VideoStreamUrl": video_stream_url,
         "LiveImageMaxPullRate": 10,
         "RequestDisplayFeedback": 0,
