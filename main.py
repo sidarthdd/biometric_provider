@@ -9,6 +9,7 @@ import sys
 import threading
 from contextlib import asynccontextmanager
 import base64
+import ffmpeg
 
 logger = setup_logger()
 
@@ -56,7 +57,7 @@ def get_frame():
         ret, frame = camera.read()
     return frame, ret
 
-@app.get("/")
+@app.get("/mjpeg")
 async def mjpeg_stream():
     def generate_frames():
         while True:
@@ -78,6 +79,41 @@ async def mjpeg_stream():
     return StreamingResponse(
         generate_frames(),
         media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
+@app.get("/video")
+async def h264_stream():
+    def generate_video():
+        writer = None
+        frame_buffer = []
+        fps = 30
+        
+        while True:
+            frame, ret = get_frame()
+            if not ret or frame is None:
+                time.sleep(0.1)
+                continue
+            
+            # Pre-encode frame to H.264 segment
+            height, width = frame.shape[:2]
+            if writer is None:
+                writer = ffmpeg.write_frames(
+                    width=width, height=height, pix_fmt_in='bgr24', pix_fmt_out='yuv420p',
+                    logger=logger
+                )
+            
+            # Yield H.264 NAL units (segmented for streaming)
+            out = ffmpeg.encode_frame(writer, frame)
+            for packet in out:
+                yield packet.tobytes()
+            
+            time.sleep(1.0 / fps)
+    
+    return StreamingResponse(
+        generate_video(),
+        media_type="video/mp4; codecs=h264",  # Or "video/h264" for raw
+        headers={"Cache-Control": "no-cache"}
     )
 
 @app.get("/api/status")
