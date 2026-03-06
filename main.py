@@ -189,7 +189,7 @@ def identify(identifyRequest: models.IdentifyRequest) -> models.IdentifyResponse
 
     try: 
         api_url = "http://13.216.238.204:8000/auth/recognize"
-        files = {'image': ('capture.jpg', jpeg.tobytes(), 'image/jpeg')}
+        files = {'file': ('capture.jpg', jpeg.tobytes(), 'image/jpeg')}
         header = {'accept': 'application/json'}
         response = requests.post(api_url, files=files, headers=header)
         if response.status_code == 200:
@@ -199,6 +199,8 @@ def identify(identifyRequest: models.IdentifyRequest) -> models.IdentifyResponse
                 result = 2
             else:
                 result = 1
+        else:
+            result = 1
     except Exception as e:
         result = 1
         logger.error(f"Error occurred while setting API URL: {e}")
