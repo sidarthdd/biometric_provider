@@ -58,7 +58,7 @@ def get_frame():
         ret, frame = camera.read()
     return frame, ret
 
-@app.get("/")
+@app.get("/mjpeg")
 async def mjpeg_stream():
     def generate_frames():
         while True:
