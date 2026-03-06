@@ -10,6 +10,7 @@ import threading
 from contextlib import asynccontextmanager
 import base64
 import ffmpeg
+import requests
 
 logger = setup_logger()
 
@@ -167,8 +168,7 @@ async def stop_boarding():
     return {}
 
 @app.post("/api/identify")
-async def identify(identifyRequest: models.IdentifyRequest) -> models.IdentifyResponse:
-    time.sleep(3)
+def identify(identifyRequest: models.IdentifyRequest) -> models.IdentifyResponse:
     frame, ret = get_frame()
     if not ret or frame is None:
         logger.error("Failed to capture frame for identification")
@@ -186,8 +186,24 @@ async def identify(identifyRequest: models.IdentifyRequest) -> models.IdentifyRe
     else:
         logger.error("Failed to encode frame for identification")
         capture_image_b64 = ""
+
+    try: 
+        api_url = "http://13.216.238.204:8000/auth/recognize"
+        files = {'image': ('capture.jpg', jpeg.tobytes(), 'image/jpeg')}
+        header = {'accept': 'application/json'}
+        response = requests.post(api_url, files=files, headers=header)
+        if response.status_code == 200:
+            logger.info(f"Received response from recognition API: {response.json()}")
+            response_data = response.json()
+            if response_data.get("recognized"):
+                result = 2
+            else:
+                result = 1
+    except Exception as e:
+        result = 1
+        logger.error(f"Error occurred while setting API URL: {e}")
     return models.IdentifyResponse(
-        Result=2,
+        Result=result,
         SpoofingDetected=False,
         Score=0.996,
         CaptureDuration=2200,
